@@ -1,0 +1,125 @@
+units            metal
+dimension        3
+atom_style      atomic
+boundary        p p f
+#processors      4 8 2
+#read_restart restart_file
+
+lattice	diamond  3.5737099648   
+
+region           box block 0 25.016 0 25.016 0 200  units box   
+create_box       5 box
+
+mass  1 12  #C1
+mass  2 12  #C2
+mass  3 12  #C3
+mass  4 12  #C4
+mass  5 10.81  #B
+
+#将基板区域分为固定层，热豫层和自由层
+region     fixed_layer   block INF INF INF INF INF 3.57  units box
+create_atoms   1 region  fixed_layer
+group      fixed_atoms   region fixed_layer
+
+region     bath_layer    block INF INF INF INF 3.57 14.30 units box
+create_atoms   2 region  bath_layer
+group      bath_atoms   region bath_layer
+
+region     free_layer    block  INF INF INF INF 14.30 28.59  units box
+create_atoms   3 region free_layer
+group      free_atoms    dynamic all region free_layer every 1
+
+
+#势函数设置
+pair_style    deepmd frozen_model.pb 
+pair_coeff   * *  C C C C B
+neighbor 1  bin
+neigh_modify  every 1 delay 0 check yes
+
+#屏幕输出设置
+thermo          1000
+dump 1d all custom 1000000 dump1.xyz id type x y z
+thermo_style custom step atoms temp etotal press vol
+
+timestep   0.0005  #步长为0.5fs 
+
+#系统能量最小化
+min_style cg 
+minimize 1e-8 1e-8 5000 5000  
+
+velocity all create 300 39849 mom yes rot yes dist gaussian units box
+
+#计算各层的温度
+compute    t_fixed   fixed_atoms  temp
+compute    t_bath    bath_atoms  temp
+compute    t_free    free_atoms  temp
+compute_modify	t_fixed  dynamic/dof yes extra/dof 0
+compute_modify	t_bath   dynamic/dof yes extra/dof 0
+compute_modify	t_free   dynamic/dof yes extra/dof 0
+
+#动态统计C4和Si原子的数量
+variable C4 atom "type==4"
+group C4_atoms dynamic all var C4
+variable C4_atoms equal count(C4_atoms)
+
+variable B atom "type==5"
+group B_atoms dynamic all var B
+variable B_atoms equal count(B_atoms)
+
+#修改屏幕输出内容
+thermo_style custom step atoms c_t_fixed  c_t_bath  c_t_free  v_C4_atoms v_B_atoms etotal press vol
+thermo_modify lost ignore flush yes
+
+#固定最底层原子，并弛豫系统
+region     fixed_layer02   block INF INF INF INF INF 3.57  units box
+group      fixed_atoms02   region fixed_layer
+
+fix 1  all nve
+fix 2  fixed_atoms02 setforce 0 0 0
+velocity fixed_atoms02 set 0 0 0 units box
+fix 3  bath_atoms temp/berendsen 300.0 300.0 0.05
+run   10000 
+
+# Deposition simulation
+region     slab block 0 25.016 0 25.016 190 200  units box
+fix   5  all  deposit 6000 4 20000 12345 region slab near 1.0 vz -253.57 -253.57  units box #沉积6000个碳原子
+fix   8  all  deposit 120 5 1000000 12345 region slab near 1.0 vz -267.17 -267.17  units box #沉积2%的硼原子
+timestep   0.0005     #10ps的入射间隔
+run      120000000
+unfix 5
+unfix 8
+
+#输出重启文件
+write_restart  restart_file
+
+
+# 计算沉积后的系统温度分布
+compute slices0 all chunk/atom bin/1d z lower  0.89 units box 
+fix 6 all ave/chunk 100 10 2000 slices0 temp file tmp.out
+run 2000
+unfix 6
+
+## Calculation of sp fraction
+compute  1 all coord/atom cutoff 1.85 
+compute  2 all reduce sum c_1 # Check group command 
+thermo_style    custom step temp pe c_2
+run             0
+variable     sp3atom atom "c_1 >= 4"
+group        sp3 variable sp3atom
+variable     sp2atom atom "c_1 == 3"
+group        sp2 variable sp2atom
+variable     sp1atom atom "c_1 == 2"
+group        sp1 variable sp1atom
+compute slices3 all chunk/atom bin/1d z lower  0.89 units box  
+compute sp3num sp3 property/chunk slices3 count
+compute sp2num sp2 property/chunk slices3 count
+compute sp1num sp1 property/chunk slices3 count
+compute allnum all  property/chunk slices3 count
+compute 4 all property/chunk slices3 coord1# Coordinate of each slice
+fix 7 all ave/time 100 10 2000 c_4 c_sp1num c_sp2num c_sp3num c_allnum file sp_ratio.txt mode vector 
+dump 2d all custom 1000 dump2.xyz id type x y z c_1
+run 2000
+unfix 7
+
+
+

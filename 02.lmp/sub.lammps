@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -p gpu
+#SBATCH --gpus 1
+
+module load anaconda3
+conda activate deepmd-2.2.7-gpu
+export OMP_NUM_THREADS=13
+
+#module load intel-psxe
+#export OMP_NUM_THREADS=64
+nvidia-smi
+LAMMPS_PLUGIN_PATH=/opt/pub/toolkits/anaconda3/envs/deepmd-2.2.7-gpu/lib/deepmd_lmp lmp < deposit.in >lmp.out 2>lmp.err
+
+#mpirun lmp -sf gpu -pk gpu 1 -in in.rigid >lmp.out 2>lmp.err
+
+
+
+

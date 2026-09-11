@@ -1,0 +1,1 @@
+必须使用MEDIUM级别的输出，不可使用Lengvin控温

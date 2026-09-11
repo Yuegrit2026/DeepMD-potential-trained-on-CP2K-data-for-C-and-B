@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH -n 96
+#SBATCH -N 1    ## 建议单节点运行 跨节点效率可能不好 如需跨节点并行请先做测试
+#SBATCH -p amd96
+
+# CP2K   ## 有报告称比64cores队列快一倍
+module load CP2K/2022.2-amd
+mpirun cp2k.psmp -i inp >aimd.out 2>aimd.err

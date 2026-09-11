@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -p gpu
+#SBATCH --gpus 1
+# 打印任务信息
+echo "Starting job $SLURM_JOB_ID at " `date`
+echo "SLURM_SUBMIT_DIR is $SLURM_SUBMIT_DIR"
+echo "Running on nodes: $SLURM_NODELIST"
+
+module load conda/deepmd-2.2.9-gpu
+# 执行任务
+## 载入vasp
+dp train input.json > log
+
+# 任务结束
+echo "Job $SLURM_JOB_ID done at " `date`
+
